@@ -3,6 +3,7 @@ from models import linear_models
 import pandas as pd
 
 #returns = stocks.get_stocks(['WEGE3.SA', 'ITSA4.SA'], start = '2019-5-2', returns = True)
+#print(returns)
 returns = pd.DataFrame(
   {'ITSA4.SA': [0.00812059526549569, 0.02301502827247104, 0.01349833036399728, 0.013318552147144835, 0.018619914082525835,
                 0.005376307930584412, -0.003208534687862752, 0.012875450079653294, 0.0010593150157012232, 0.004232878037357057,
@@ -51,5 +52,3 @@ print('Os coeficientes são:', coeficientes)
 X_p = factors.mean()
 previsao = lm.predict([X_p.tolist()])
 print(f'A previsão é {previsao}')
-
-print('brnah')

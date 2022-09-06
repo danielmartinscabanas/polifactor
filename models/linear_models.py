@@ -30,7 +30,7 @@ class linearModel:
     def __init__(self, returns, factors):
         self.returns, self.factors = _regularize_dataframe(returns, factors)
         self.tickers = self.returns.columns.values.tolist()
-    
+
     def complete(self, X_p):
         self.X_p = X_p
         self.results = {ticker:{'prediction':None,
