@@ -51,4 +51,5 @@ print('Os coeficientes são:', coeficientes)
 X_p = factors.mean()
 previsao = lm.predict([X_p.tolist()])
 print(f'A previsão é {previsao}')
-#ghost
+
+print('brnah')
