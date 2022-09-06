@@ -48,10 +48,31 @@ class linearModel:
 
     def predict(self, X_p):
         self.X_p = X_p
-        return {ticker:self.results[ticker]['prediction'] for ticker in self.tickers}
+        self.predictions = {ticker:{'prediction':None} for ticker in self.tickers}
+        self._model = linear_model.LinearRegression(fit_intercept=True)
+        for ticker in self.tickers:
+            X = self.factors
+            Y = self.returns[ticker]
+            lm = self._model.fit(X.values,Y)
+            self.predictions[ticker]['prediction'] = lm.predict(self.X_p)[0]
+        return self.predictions
 
     def coefs(self):
-        return {ticker:self.results[ticker]['coefs'] for ticker in self.tickers}
+        self.coefs = {ticker:{'coef':None} for ticker in self.tickers}
+        self._model = linear_model.LinearRegression(fit_intercept=True)
+        for ticker in self.tickers:
+            X = self.factors
+            Y = self.returns[ticker]
+            lm = self._model.fit(X.values,Y)
+            self.coefs[ticker]['coef'] = np.insert(lm.coef_, 0, lm.intercept_)
+        return self.coefs
 
     def scores(self):
-        return {ticker:self.results[ticker]['scores'] for ticker in self.tickers}
+        self.scores = {ticker:{'score':None} for ticker in self.tickers}
+        self._model = linear_model.LinearRegression(fit_intercept=True)
+        for ticker in self.tickers:
+            X = self.factors
+            Y = self.returns[ticker]
+            lm = self._model.fit(X.values,Y)
+            self.scores[ticker]['score'] = lm.score(X.values, Y)
+        return self.scores

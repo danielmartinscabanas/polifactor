@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
+import seaborn as sns
 
 class Analyzer:
     def __init__(self, data):
@@ -14,10 +15,10 @@ class Analyzer:
         self.col_names = self.data.columns.values.tolist()
 
     def correl_mtx(self):
-        return self.data.corr()        
+        sns.heatmap(self.data.corr())
     
     def plot_scatter_mtx(self):
-        pd.plotting.scatter_matrix(self.data, alpha = 0.3, diagonal = 'kde')
+        sns.pairplot(self.data)
         plt.show()
 
     def plot_autocorrel(self):
