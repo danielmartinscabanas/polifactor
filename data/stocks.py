@@ -4,6 +4,7 @@ import yfinance as yf
 import sqlite3
 import datetime as dt
 import holidays
+import numpy as np
 
 ONE_DAY = dt.timedelta(days=1)
 HOLIDAYS_US = holidays.US()
@@ -19,6 +20,12 @@ def _last_business_day(date):
     while last_day.weekday() in holidays.WEEKEND or last_day in HOLIDAYS_US:
         last_day -= ONE_DAY
     return last_day
+
+def _contains(lst1, lst2):
+    for item in lst1:
+        if item not in lst2:
+            return False
+    return True
 
 def get_stocks(tickers, start, end=None, nan_interpolation=False):
     """The price of stocks from Yahoo Finance
@@ -45,18 +52,30 @@ def get_stocks(tickers, start, end=None, nan_interpolation=False):
             given stock tickers
     """
     def _update_db(tickers, start, end):
-        conn = sqlite3.connect('stocks_database')
-        c = conn.cursor()
-        c.execute('CREATE TABLE IF NOT EXISTS stocks_data (Date)')
-        conn.commit()
-        yf.pdr_override()
-        ohlc = yf.download(tickers, start=start, end=end)
-        price = ohlc['Adj Close']
-        price.to_sql('stocks_data', conn, if_exists='replace', index = True)
-        c.execute("""SELECT * FROM stocks_data""")
-        price_df = pd.DataFrame(c.fetchall(), columns=['Date'] + tickers)
-        price_df['Date'] = pd.to_datetime(price_df['Date']).dt.date
-        return price_df.set_index('Date')
+        try:
+            conn = sqlite3.connect('stocks_database')
+            c = conn.cursor()
+            c.execute('CREATE TABLE IF NOT EXISTS stocks_data (Date)')
+            conn.commit()
+            yf.pdr_override()
+            ohlc = yf.download(tickers, start=start, end=end)
+            price = ohlc['Adj Close']
+            if len(tickers) == 1:
+                price = price.to_frame()
+                price.rename(columns = {price.columns.values[0]:tickers[0]}, inplace = True)
+            price.to_sql(name='stocks_data', con=conn, if_exists='replace', index = True)
+            conn.commit()
+            c.execute("""SELECT * FROM stocks_data""")
+            price_df = pd.DataFrame.from_records(c.fetchall(), columns=[desc[0] for desc in c.description])
+            price_df['Date'] = pd.to_datetime(price_df['Date']).dt.date
+            c.close()
+            return price_df.set_index('Date')[tickers]
+        except sqlite3.Error as error:
+            print("[INFO]: Failed to read data from sqlite table", error)
+
+        finally:
+            if conn:
+                conn.close()
 
     if end == None:
         today = dt.datetime.today()
@@ -69,25 +88,40 @@ def get_stocks(tickers, start, end=None, nan_interpolation=False):
     if not bool(len(pd.bdate_range(end, end))):
         end = _last_business_day(end)
         print(f'[INFO]: The "end" date you chose is a holiday, so we are adopting the last business day, which is "{end}"')
-    conn = sqlite3.connect('stocks_database')
-    c = conn.cursor()
-    c.execute('CREATE TABLE IF NOT EXISTS stocks_data (Date)')
-    conn.commit()
-    dates_in_db = pd.read_sql("SELECT Date FROM stocks_data", conn)
-    if dates_in_db.empty:
-        print('[INFO]: The database is empty! Downloading data...')
-        price_df = _update_db(tickers, start, end)
-    else:
-        min_date = dt.datetime.strptime(pd.read_sql("SELECT * FROM stocks_data WHERE Date = (SELECT min(Date) FROM stocks_data)", conn).values[0][0].split()[0], "%Y-%m-%d").date()
-        max_date = dt.datetime.strptime(pd.read_sql("SELECT * FROM stocks_data WHERE Date = (SELECT max(Date) FROM stocks_data)", conn).values[0][0].split()[0], "%Y-%m-%d").date()
-        if start < min_date or end > max_date:
-            print('[INFO]: The period you require was not available yet! Downloading data...')
+    try:
+        conn = sqlite3.connect('stocks_database')
+        c = conn.cursor()
+        c.execute('CREATE TABLE IF NOT EXISTS stocks_data (Date)')
+        conn.commit()
+        dates_in_db = pd.read_sql("SELECT Date FROM stocks_data", conn)
+        if dates_in_db.empty:
+            print('[INFO]: The database is empty! Downloading data...')
             price_df = _update_db(tickers, start, end)
         else:
-            c.execute("""SELECT * FROM stocks_data""")
-            price_df = pd.DataFrame(c.fetchall(), columns=['Date'] + tickers)
-            price_df['Date'] = pd.to_datetime(price_df['Date']).dt.date
-            price_df = price_df.set_index('Date')
-    return price_df
+            min_date = dt.datetime.strptime(pd.read_sql("SELECT * FROM stocks_data WHERE Date = (SELECT min(Date) FROM stocks_data)", conn).values[0][0].split()[0], "%Y-%m-%d").date()
+            max_date = dt.datetime.strptime(pd.read_sql("SELECT * FROM stocks_data WHERE Date = (SELECT max(Date) FROM stocks_data)", conn).values[0][0].split()[0], "%Y-%m-%d").date()
+            if start < min_date or end > max_date + dt.timedelta(days=1):
+                print('[INFO]: The period you require was not available yet! Downloading data...')
+                price_df = _update_db(tickers, start, end)
+            else:
+                c = conn.execute("""SELECT * FROM stocks_data""")
+                tickers_in_db = [d[0] for d in c.description]
+                if not _contains(tickers, tickers_in_db):
+                    print('[INFO]: The ticker you require was not available yet! Downloading data...')
+                    price_df = _update_db(tickers, start, end)
+                else:
+                    print(['Date'] + tickers)
+                    price_df = pd.DataFrame.from_records(c.fetchall(), columns=[desc[0] for desc in c.description])
+                    price_df['Date'] = pd.to_datetime(price_df['Date']).dt.date
+                    price_df = price_df.set_index('Date')
+        conn.close()
+    except sqlite3.Error as error:
+            print("[INFO]: Failed to read data from sqlite table", error)
+    finally:
+        if conn:
+            conn.close()
+            print("[INFO]: The SQLite connection is closed")
 
-print(get_stocks(['ITSA4.SA', 'WEGE3.SA'], '2022-04-02', '2022-10-07'))
+    return price_df[tickers]
+
+print(get_stocks(['WEGE3.SA', 'ITSA4.SA'], '2022-10-01', '2022-10-12'))
