@@ -4,7 +4,7 @@ import stats
 from scipy.stats import norm
 import matplotlib.pyplot as plt
 
-def regularize_dataframe(df1, df2):
+def regularize_dataframe(df1, df2, nan_interpolation=True):
     """Function that forces the two dataframes to have the same lenght
 
     Parameters
@@ -21,12 +21,26 @@ def regularize_dataframe(df1, df2):
         df2 : pandas.DataFrame
             A the second regularized dataframe
     """
-    _df1_cols = df1.columns.tolist()
-    _df2_cols = df2.columns.tolist()
-    _temp_df = pd.concat([df1, df2], axis=1,  join="inner")
-    df1 = _temp_df[_df1_cols]
-    df2 = _temp_df[_df2_cols]
-    return df1, df2
+
+    if not df2.empty:
+        if nan_interpolation:
+            df1 = df1.interpolate(method ='linear', limit_direction ='both')
+            df2 = df2.interpolate(method ='linear', limit_direction ='both')
+        else:
+            df1.dropna(inplace=True)
+            df2.dropna(inplace=True)
+        _df1_cols = df1.columns.tolist()
+        _df2_cols = df2.columns.tolist()
+        _temp_df = pd.concat([df1,df2], axis=1, join='inner')
+        df1 = _temp_df[_df1_cols[1:]]
+        df2 = _temp_df[_df2_cols]
+        return df1, df2
+    else:
+        if nan_interpolation:
+            df1 = df1.interpolate(method ='linear', limit_direction ='both')
+        else:
+            df1.dropna(inplace=True)
+        return df1
 
 def gen_resamples(sample, replicates=1):
     """Generate random resamples of the given sample

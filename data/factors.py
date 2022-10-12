@@ -5,7 +5,7 @@ from datetime import datetime
 import yfinance as yf
 import pandas_datareader.data as reader
 import sqlite3
-
+from data_tools import regularize_dataframe
 
 def get_stocks(factors, start, end=None, nan_interpolation=False):
     """Returns the factors values
@@ -29,6 +29,7 @@ def get_stocks(factors, start, end=None, nan_interpolation=False):
         pandas.Dataframe
             A dataframe with the values of the desired factors
     """
+
 nan_interpolation = False
 
 start = dt.date(2015,5,5)
@@ -85,13 +86,6 @@ original_df = get_prices(**parameters)
 returns = original_df/original_df.shift(1) - 1
 returns.dropna(inplace=True)
 
-def regularize_dataframe(df1, df2):
-  _df1_cols = df1.columns.tolist()
-  _df2_cols = df2.columns.tolist()
-  _temp_df = pd.concat([df1,df2], axis=1, join='inner')
-  df1 = _temp_df[_df1_cols[1:]]
-  df2 = _temp_df[_df2_cols]
-  return df1, df2
 factors, returns = regularize_dataframe(factors, returns)
 
 def multifactor_model(returns, factors, X_p):
@@ -111,3 +105,6 @@ def multifactor_model(returns, factors, X_p):
         results[ticker]['score'] = lm.score(X.values, Y)
 
     return results
+
+
+# Falta dar return num df dos fatores?
