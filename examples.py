@@ -47,8 +47,3 @@ lm = linear_models.linearModel(returns, factors)
 # Encontrando os coeficientes
 coeficientes = lm.coefs()
 print('Os coeficientes são:', coeficientes)
-
-# Prevendo a ação com base na previsão dos fatores
-X_p = factors.mean()
-previsao = lm.predict([X_p.tolist()])
-print(f'A previsão é {previsao}')
