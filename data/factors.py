@@ -1,13 +1,26 @@
+from ast import Bytes
+from genericpath import isfile
 import pandas as pd
+import numpy as np
 from sklearn import linear_model
-import datetime as dt
-from datetime import datetime
+from datetime import date, timedelta, datetime
+import matplotlib.pyplot as plt
+import statsmodels.api as sm
 import yfinance as yf
-import pandas_datareader.data as reader
-import sqlite3
-from data_tools import regularize_dataframe
+import requests
+from bs4 import BeautifulSoup as bs
+import zipfile
+from io import BytesIO
+import os
 
-def get_stocks(factors, start, end=None, nan_interpolation=False):
+
+def clean_directory():
+  if os.path.isfile('factors.csv'):
+    os.remove('factors.csv')
+  if os.path.isfile('F-F_Research_Data_5_Factors_2x3_daily.CSV'):
+    os.remove('F-F_Research_Data_5_Factors_2x3_daily.CSV')
+
+def get_factors(factors, start, end=None, nan_interpolation=False):
     """Returns the factors values
     Parameters
     ----------
@@ -29,82 +42,34 @@ def get_stocks(factors, start, end=None, nan_interpolation=False):
         pandas.Dataframe
             A dataframe with the values of the desired factors
     """
+    #Remove os arquivos dos fatores que podem ter ficado do último uso
+    clean_directory()
 
-nan_interpolation = False
+    #Baixa o arquivo contendo os dados dos fatores
+    file_url = ('https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/F-F_Research_Data_5_Factors_2x3_daily_CSV.zip')
+    req = requests.get(file_url)
+    zipfile = zipfile.ZipFile(BytesIO(req.content))
+    zipfile.extractall()
 
-start = dt.date(2015,5,5)
-factors = reader.DataReader('F-F_Research_Data_5_Factors_2x3_daily', 'famafrench', start)
+    #Formata o arquivo
+    a_file = open("F-F_Research_Data_5_Factors_2x3_daily.csv", "r")
+    lines = a_file.readlines()
+    a_file.close()
 
-factors = factors[0]
+    del lines[0:4]
 
-if nan_interpolation:
-  factors = factors.interpolate(method ='linear', limit_direction ='both')
-else:
-  factors = factors.dropna()
+    new_file = open("factors.csv", "w+")
+    new_file.write('Date,Mkt-RF,SMB,HML,RMW,CMA,RF \n')
+    for line in lines:
+        new_file.write(line)
+    new_file.close()
 
-factors = factors/100
-
-# Stablish connections with sqlite3
-conn = sqlite3.connect('factors_data')
-c = conn.cursor()
-c.execute('CREATE TABLE IF NOT EXISTS factors (Date, SMB, HML, RMW, CMA, RF)')
-conn.commit()
-
-# Upload dataset to sql
-factors.to_sql('factors_data', conn, if_exists='replace', index = True)
-#cursor.execute("SELECT * FROM factors_database")
-
-# Extract sql data
-factors = pd.read_sql("SELECT * FROM factors_data", conn)
-factors["Date"] = pd.to_datetime(factors.Date, format="%Y-%m-%d")
-factors = factors.set_index("Date")
-
-# Em produção, pegar data mínima / máxima
-# data = pd.read_sql("SELECT * FROM factors_data WHERE Date = (SELECT min(Date) FROM factors_data)", conn)
-# print(data.values[0][0])
-# data = pd.to_datetime(data["Date"])
-# print(data)
-
-
-parameters = {
-                'tickers': ['MSFT', 'GOGL'],
-                'start': '2015-5-2',
-                'end' : '2022-6-30',
-                'nan_interpolation': False
-              }
-
-def get_prices(tickers, start, end, nan_interpolation):
-  yf.pdr_override()
-  ohlc = yf.download(tickers, start, end)
-  df = pd.DataFrame(columns = ['Adj Close'])
-  df = ohlc['Adj Close']
-  if nan_interpolation:
-    df = df.interpolate(method ='linear', limit_direction ='both')
-  return df
-
-original_df = get_prices(**parameters) 
-returns = original_df/original_df.shift(1) - 1
-returns.dropna(inplace=True)
-
-factors, returns = regularize_dataframe(factors, returns)
-
-def multifactor_model(returns, factors, X_p):
-    tickers = returns.columns.values.tolist()
-    results = {ticker:{'prediction':None,
-                       'coefs':None,
-                       'intercept':None,
-                       'scores':None} for ticker in tickers}
-    lm = linear_model.LinearRegression(fit_intercept=True)
-    for ticker in tickers:
-        X = factors
-        Y = returns[ticker]
-        model = lm.fit(X.values,Y)
-        results[ticker]['prediction'] = lm.predict(X_p)
-        results[ticker]['coefs'] = lm.coef_
-        results[ticker]['intercept'] = lm.intercept_
-        results[ticker]['score'] = lm.score(X.values, Y)
-
-    return results
-
-
-# Falta dar return num df dos fatores?
+    #Preparação do dataframe dos fatores
+    factors = pd.read_csv('factors.csv', delimiter=',' )
+    factors = factors.loc[factors['Date'] >= 20150502]
+    if nan_interpolation:
+      factors = factors.interpolate(method ='linear', limit_direction ='both')
+    else:
+      factors = factors.dropna()
+      
+    return factors
